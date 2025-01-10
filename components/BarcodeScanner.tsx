@@ -13,46 +13,18 @@ export default function BarcodeScanner({ onScan }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
 
   const startScanning = async () => {
-    if (!navigator.mediaDevices?.enumerateDevices) {
-      console.error('This browser does not support media devices enumeration.');
-      return;
-    }
-  
     if (!readerRef.current) {
       readerRef.current = new BrowserMultiFormatReader();
     }
-  
+
     try {
       setIsScanning(true);
-      const videoInputDevices = await readerRef.current.listVideoInputDevices();
-  
-      if (videoInputDevices.length === 0) {
-        console.error('No video input devices found.');
-        setIsScanning(false);
-        return;
-      }
-  
-      const backCamera = videoInputDevices.find(device =>
-        device.label.toLowerCase().includes('back') ||
-        device.label.toLowerCase().includes('rear') ||
-        device.label.toLowerCase().includes('environment')
-      );
-  
-      const selectedDevice = backCamera ? backCamera.deviceId : videoInputDevices[0].deviceId;
-  
-      const constraints = {
-        video: {
-          deviceId: selectedDevice,
-          facingMode: backCamera ? 'environment' : 'user',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      };
-  
       await readerRef.current.decodeFromVideoDevice(
-        selectedDevice,
+        selectedDevice!,
         videoRef.current!,
         (result) => {
           if (result) {
@@ -66,7 +38,6 @@ export default function BarcodeScanner({ onScan }: BarcodeScannerProps) {
       setIsScanning(false);
     }
   };
-  
 
   const stopScanning = () => {
     if (readerRef.current) {
@@ -75,7 +46,21 @@ export default function BarcodeScanner({ onScan }: BarcodeScannerProps) {
     }
   };
 
+  const getDevices = async () => {
+    try {
+      const allDevices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = allDevices.filter(device => device.kind === 'videoinput');
+      setDevices(videoDevices);
+      if (videoDevices.length > 0) {
+        setSelectedDevice(videoDevices[0].deviceId); // اختيار أول كاميرا بشكل افتراضي
+      }
+    } catch (err) {
+      console.error('Error listing video devices:', err);
+    }
+  };
+
   useEffect(() => {
+    getDevices();
     return () => {
       if (readerRef.current) {
         readerRef.current.reset();
@@ -91,18 +76,31 @@ export default function BarcodeScanner({ onScan }: BarcodeScannerProps) {
           className="w-full h-full object-cover"
         />
       </div>
-      <div className="flex gap-2">
-        {!isScanning ? (
-          <Button onClick={startScanning} className="gap-2">
-            <Camera className="w-4 h-4" />
-            Start Scanning
-          </Button>
-        ) : (
-          <Button onClick={stopScanning} variant="destructive" className="gap-2">
-            <StopCircle className="w-4 h-4" />
-            Stop Scanning
-          </Button>
-        )}
+      <div className="flex flex-col gap-2">
+        <select
+          onChange={(e) => setSelectedDevice(e.target.value)}
+          value={selectedDevice || ''}
+          className="p-2 border rounded"
+        >
+          {devices.map((device) => (
+            <option key={device.deviceId} value={device.deviceId}>
+              {device.label || `Camera ${devices.indexOf(device) + 1}`}
+            </option>
+          ))}
+        </select>
+        <div className="flex gap-2">
+          {!isScanning ? (
+            <Button onClick={startScanning} className="gap-2">
+              <Camera className="w-4 h-4" />
+              Start Scanning
+            </Button>
+          ) : (
+            <Button onClick={stopScanning} variant="destructive" className="gap-2">
+              <StopCircle className="w-4 h-4" />
+              Stop Scanning
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
